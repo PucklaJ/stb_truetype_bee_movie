@@ -1,0 +1,6 @@
+.*
+!.gitignore
+# xmake
+build
+
+output.txt
