@@ -1,5 +1,6 @@
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 #define STB_TRUETYPE_IMPLEMENTATION
@@ -7,8 +8,7 @@
 
 constexpr char default_font_file[] = "/usr/share/fonts/TTF/DejaVuSans.ttf";
 constexpr auto default_font_size = 25;
-constexpr char output_file_name[] = "output.txt";
-constexpr auto start_x_pos = 2;
+constexpr char default_output_file_name[] = "output.txt";
 
 struct FontBitmap {
   std::vector<unsigned char> pixels;
@@ -19,34 +19,71 @@ struct FontBitmap {
 struct StringBitmap {
   std::vector<FontBitmap> bitmaps;
   std::vector<size_t> x_positions;
-  std::vector<size_t> y_positions;
+  std::vector<long> y_positions;
 };
 
+// Arguments:
+// argv[1] ..... font size in pixel
+// argv[2] ..... font file
+// argv[3] ..... string which will be written instead of bee movie
+// argv[4] ..... output file
+//
+// All arguments are optional
+//
 int main(int args, char *argv[]) {
-  // Parse bee move script
-  std::string bee_movie_text;
-  std::ifstream bee_movie_file("bee_movie.txt", std::ios_base::ate);
-  if (bee_movie_file.fail()) {
-    std::cerr << "Failed to open bee movie script" << std::endl;
-    return 1;
+  // Variables for all the arguments
+  float font_size;
+  std::string font_file_name;
+  std::string input_string;
+  std::string output_file_name;
+
+  // Parse the arguments
+  if (args >= 5) {
+    output_file_name = argv[4];
+  } else {
+    output_file_name = default_output_file_name;
   }
-  const auto bee_move_file_size = bee_movie_file.tellg();
-  bee_movie_text.resize(bee_move_file_size);
-  bee_movie_file.seekg(0);
-  bee_movie_file.read((char *)bee_movie_text.data(), bee_move_file_size);
-  bee_movie_file.close();
-  // Remove all \0 characters at the end
-  while (bee_movie_text.back() == L'\0') {
-    bee_movie_text.resize(bee_movie_text.length() - 1);
+  if (args >= 4) {
+    input_string = argv[3];
+  } else {
+    // Parse bee move script
+    std::string bee_movie_text;
+    std::ifstream bee_movie_file("bee_movie.txt", std::ios_base::ate);
+    if (bee_movie_file.fail()) {
+      std::cerr << "Failed to open bee movie script" << std::endl;
+      return 1;
+    }
+    const auto bee_move_file_size = bee_movie_file.tellg();
+    bee_movie_text.resize(bee_move_file_size);
+    bee_movie_file.seekg(0);
+    bee_movie_file.read((char *)bee_movie_text.data(), bee_move_file_size);
+    bee_movie_file.close();
+    // Remove all \0 characters at the end
+    while (bee_movie_text.back() == '\0') {
+      bee_movie_text.resize(bee_movie_text.length() - 1);
+    }
+    std::cout << "Bee Movie Script: " << bee_movie_text.length()
+              << " Characters" << std::endl;
+    input_string = std::move(bee_movie_text);
   }
-  std::cout << "Bee Movie Script: " << bee_movie_text.length() << " Characters"
-            << std::endl;
+  if (args >= 3) {
+    font_file_name = argv[2];
+  } else {
+    font_file_name = default_font_file;
+  }
+  if (args >= 2) {
+    std::stringstream converter;
+    converter << argv[1];
+    converter >> font_size;
+  } else {
+    font_size = default_font_size;
+  }
 
   stbtt_fontinfo font;
   std::vector<unsigned char> font_buffer;
 
   // Read font file
-  std::ifstream font_file(default_font_file,
+  std::ifstream font_file(font_file_name,
                           std::ios_base::binary | std::ios_base::ate);
   if (font_file.fail()) {
     std::cerr << "Failed to open font file" << std::endl;
@@ -65,7 +102,7 @@ int main(int args, char *argv[]) {
   }
 
   // Initialise all font values
-  const auto scale = stbtt_ScaleForPixelHeight(&font, default_font_size);
+  const auto scale = stbtt_ScaleForPixelHeight(&font, font_size);
   int ascent, descent, line_gap;
   stbtt_GetFontVMetrics(&font, &ascent, &descent, &line_gap);
   ascent = static_cast<int>(ascent * scale);
@@ -77,11 +114,11 @@ int main(int args, char *argv[]) {
 
   // Loop over all characters
   auto current_ascent = ascent;
-  float current_x = start_x_pos;
-  for (size_t i = 0; i < bee_movie_text.length(); i++) {
+  float current_x = 0.0f;
+  for (size_t i = 0; i < input_string.length(); i++) {
     // If we've found a new line we should advance to the next line
-    if (bee_movie_text[i] == '\n') {
-      current_x = start_x_pos;
+    if (input_string[i] == '\n') {
+      current_x = 0.0f;
       current_ascent += ascent - descent + line_gap;
       continue;
     }
@@ -89,8 +126,8 @@ int main(int args, char *argv[]) {
     // Get all metrics from the current character
     int advance, lsb, x0, y0, x1, y1;
     const auto x_shift = current_x - floorf(current_x);
-    stbtt_GetCodepointHMetrics(&font, bee_movie_text[i], &advance, &lsb);
-    stbtt_GetCodepointBitmapBoxSubpixel(&font, bee_movie_text[i], scale, scale,
+    stbtt_GetCodepointHMetrics(&font, input_string[i], &advance, &lsb);
+    stbtt_GetCodepointBitmapBoxSubpixel(&font, input_string[i], scale, scale,
                                         x_shift, 0, &x0, &y0, &x1, &y1);
 
     // Allocate memory for the bitmap
@@ -101,19 +138,23 @@ int main(int args, char *argv[]) {
     // Create the bitmap
     stbtt_MakeCodepointBitmapSubpixel(&font, fb.pixels.data(), fb.pixel_width,
                                       fb.pixel_height, fb.pixel_width, scale,
-                                      scale, x_shift, 0, bee_movie_text[i]);
+                                      scale, x_shift, 0, input_string[i]);
 
     // Insert the bitmap into all_characters
     all_characters.bitmaps.emplace_back(std::move(fb));
-    all_characters.x_positions.emplace_back(current_x + x0);
+    all_characters.x_positions.emplace_back(
+        std::max(static_cast<int>(current_x + x0), 0));
     all_characters.y_positions.emplace_back(current_ascent + y0);
 
     // Advance the x position
+    if (current_x + x0 < 0) {
+      current_x -= x0;
+    }
     current_x += advance * scale;
     // Add kerning
-    if (i != bee_movie_text.length() - 1) {
-      current_x += scale * stbtt_GetCodepointKernAdvance(
-                               &font, bee_movie_text[i], bee_movie_text[i + 1]);
+    if (i != input_string.length() - 1) {
+      current_x += scale * stbtt_GetCodepointKernAdvance(&font, input_string[i],
+                                                         input_string[i + 1]);
     }
   }
 
@@ -143,6 +184,10 @@ int main(int args, char *argv[]) {
     const auto y = all_characters.y_positions[c];
     for (size_t i = 0; i < all_characters.bitmaps[c].pixel_width; i++) {
       for (size_t j = 0; j < all_characters.bitmaps[c].pixel_height; j++) {
+        // Clip when y gets below 0
+        if (static_cast<long>(j) + y < 0) {
+          continue;
+        }
         const auto complete_index = (i + x) + (j + y) * complete_width;
         const auto bitmap_index = i + j * all_characters.bitmaps[c].pixel_width;
 
@@ -168,7 +213,7 @@ int main(int args, char *argv[]) {
   output_file.close();
 
   std::cout << "Successfully wrote the Bee Movie Script into "
-            << output_file_name << std::endl;
+            << default_output_file_name << std::endl;
 
   return 0;
 }
