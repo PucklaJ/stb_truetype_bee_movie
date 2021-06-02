@@ -160,6 +160,7 @@ int main(int args, char *argv[]) {
 
   size_t complete_width = 0;
   size_t complete_height = 0;
+  size_t min_y = -1;
   // Get the max width and max height
   for (size_t i = 0; i < all_characters.bitmaps.size(); i++) {
     const auto new_height =
@@ -172,7 +173,11 @@ int main(int args, char *argv[]) {
     if (new_width > complete_width) {
       complete_width = new_width;
     }
+    if (all_characters.y_positions[i] < min_y) {
+      min_y = all_characters.y_positions[i];
+    }
   }
+  complete_height -= min_y;
   std::cout << "Complete Width: " << complete_width << " px" << std::endl;
   std::cout << "Complete Height: " << complete_height << " px" << std::endl;
 
@@ -181,7 +186,7 @@ int main(int args, char *argv[]) {
   // Write all bitmaps into the complete string
   for (size_t c = 0; c < all_characters.bitmaps.size(); c++) {
     const auto x = all_characters.x_positions[c];
-    const auto y = all_characters.y_positions[c];
+    const auto y = all_characters.y_positions[c] - static_cast<long>(min_y);
     for (size_t i = 0; i < all_characters.bitmaps[c].pixel_width; i++) {
       for (size_t j = 0; j < all_characters.bitmaps[c].pixel_height; j++) {
         // Clip when y gets below 0
